@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -66,6 +67,21 @@ using aidl::android::hardware::health::BatteryStatus;
 using aidl::android::hardware::health::HealthInfo;
 
 namespace {
+
+static bool isOplusMilliampDevice() {
+    char device[PROPERTY_VALUE_MAX] = {};
+    property_get("ro.product.device", device, "");
+    return !strcasecmp(device, "OP60FFL1") || !strcasecmp(device, "OP611FL1") ||
+           !strcasecmp(device, "infiniti");
+}
+
+static int normalizeCurrentMicroamps(int current) {
+    // Some OPlus power_supply nodes report current in mA while AOSP expects uA.
+    if (isOplusMilliampDevice() && current > 0 && current < 10000) {
+        return current * 1000;
+    }
+    return current;
+}
 
 // Translate from AIDL back to HIDL definition for getHealthInfo_*_* calls.
 // Skips storageInfo and diskStats.
@@ -399,7 +415,8 @@ void BatteryMonitor::updateValues(void) {
     mHealthInfo->batteryVoltageMillivolts = getIntField(mHealthdConfig->batteryVoltagePath) / 1000;
 
     if (!mHealthdConfig->batteryCurrentNowPath.empty())
-        mHealthInfo->batteryCurrentMicroamps = getIntField(mHealthdConfig->batteryCurrentNowPath);
+        mHealthInfo->batteryCurrentMicroamps =
+                normalizeCurrentMicroamps(getIntField(mHealthdConfig->batteryCurrentNowPath));
 
     if (!mHealthdConfig->batteryFullChargePath.empty())
         mHealthInfo->batteryFullChargeUah = getIntField(mHealthdConfig->batteryFullChargePath);
@@ -555,13 +572,14 @@ void BatteryMonitor::updateValues(void) {
 
             // Prefer battery current_now / voltage_now
             if (access(SYSFS_BATTERY_CURRENT, R_OK) == 0) {
-                ChargingCurrent = abs(getIntField(String8(SYSFS_BATTERY_CURRENT)));
+                ChargingCurrent = normalizeCurrentMicroamps(
+                        abs(getIntField(String8(SYSFS_BATTERY_CURRENT))));
             } else {
                 path.clear();
                 path.appendFormat("%s/%s/current_now", POWER_SUPPLY_SYSFS_PATH,
                                   mChargerNames[i].c_str());
                 if (access(path.c_str(), R_OK) == 0) {
-                    ChargingCurrent = abs(getIntField(path));
+                    ChargingCurrent = normalizeCurrentMicroamps(abs(getIntField(path)));
                 }
             }
 
