@@ -69,10 +69,18 @@ using aidl::android::hardware::health::HealthInfo;
 namespace {
 
 static bool isOplusMilliampDevice() {
-    char device[PROPERTY_VALUE_MAX] = {};
-    property_get("ro.product.device", device, "");
-    return !strcasecmp(device, "OP60FFL1") || !strcasecmp(device, "OP611FL1") ||
-           !strcasecmp(device, "infiniti");
+    char flavor[PROPERTY_VALUE_MAX] = {};
+    property_get("ro.build.flavor", flavor, "");
+
+    char* dash = strchr(flavor, '-');
+    if (dash != nullptr) {
+        *dash = '\0';
+    }
+
+    return !strcasecmp(flavor, "infiniti") ||
+           !strcasecmp(flavor, "macan") ||
+           !strcasecmp(flavor, "macanc") ||
+           !strcasecmp(flavor, "fairlady");
 }
 
 static int normalizeCurrentMicroamps(int current) {
